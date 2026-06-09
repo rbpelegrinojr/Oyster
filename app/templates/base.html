@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Oyster CCTV{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3BBFC2" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+    </svg>
+    <span class="sidebar-logo-text">Oyster CCTV</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a href="{{ url_for('dashboard.dashboard') }}"
+       class="{{ 'active' if request.endpoint == 'dashboard.dashboard' or request.endpoint == 'dashboard.index' }}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+      </svg>
+      Dashboard
+    </a>
+    <a href="{{ url_for('settings.index') }}"
+       class="{{ 'active' if request.blueprint == 'settings' }}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41
+                 M12 2v2M12 20v2M2 12h2M20 12h2"/>
+      </svg>
+      Camera Settings
+    </a>
+    <a href="{{ url_for('training.index') }}"
+       class="{{ 'active' if request.blueprint == 'training' }}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      Training
+    </a>
+    <a href="{{ url_for('line_setup.index') }}"
+       class="{{ 'active' if request.blueprint == 'line_setup' }}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="5" y1="12" x2="19" y2="12"/>
+        <polyline points="12 5 19 12 12 19"/>
+      </svg>
+      Line Setup
+    </a>
+    <a href="{{ url_for('intruder.index') }}"
+       class="{{ 'active' if request.blueprint == 'intruder' }}">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      Intruder Logs
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">Oyster v1.0 &nbsp;·&nbsp; Teal Theme</div>
+</aside>
+
+<!-- ── Main ────────────────────────────────────────────────── -->
+<div class="main">
+  <header class="topbar">
+    <span class="topbar-title">{% block page_title %}Dashboard{% endblock %}</span>
+    <div style="font-size:.8rem;color:var(--color-text-muted);">
+      <span id="clock"></span>
+    </div>
+  </header>
+
+  <!-- Flash messages -->
+  <div style="padding: 0 24px; padding-top: 14px;">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat if cat in ['success','danger','warning','info'] else 'info' }}">
+          {{ msg }}
+        </div>
+      {% endfor %}
+    {% endwith %}
+  </div>
+
+  <main class="page-content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script>
+  (function () {
+    function tick() {
+      const el = document.getElementById('clock');
+      if (el) el.textContent = new Date().toLocaleString();
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

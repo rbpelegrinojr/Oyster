@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Intruder Logs – Oyster CCTV{% endblock %}
+{% block page_title %}Intruder Logs{% endblock %}
+
+{% block content %}
+
+<!-- Filter bar -->
+<div class="card mb-3">
+  <div class="card-body" style="padding:14px 18px;">
+    <form method="get" action="{{ url_for('intruder.index') }}"
+          style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+
+      <div class="form-group" style="margin:0;min-width:160px;">
+        <label class="form-label">Camera</label>
+        <select name="camera_id" class="form-control">
+          <option value="">All Cameras</option>
+          {% for cam in cameras %}
+          <option value="{{ cam.id }}" {{ 'selected' if selected_camera == cam.id }}>{{ cam.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" style="margin:0;min-width:150px;">
+        <label class="form-label">Event Type</label>
+        <select name="event_type" class="form-control">
+          <option value="">All Events</option>
+          <option value="face_detection" {{ 'selected' if selected_event == 'face_detection' }}>Face Detection</option>
+          <option value="line_crossing" {{ 'selected' if selected_event == 'line_crossing' }}>Line Crossing</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin:0;min-width:140px;">
+        <label class="form-label">From Date</label>
+        <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+      </div>
+
+      <div class="form-group" style="margin:0;min-width:140px;">
+        <label class="form-label">To Date</label>
+        <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="{{ url_for('intruder.index') }}" class="btn btn-outline">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Log table -->
+<div class="card">
+  <div class="card-header">
+    Intruder Events
+    <span class="badge badge-danger">{{ pagination.total }}</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Snapshot</th>
+          <th>Timestamp</th>
+          <th>Camera</th>
+          <th>Event Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr class="{{ 'row-intruder' if log.event_type == 'face_detection' else 'row-line-crossing' }}">
+          <td>{{ log.id }}</td>
+          <td>
+            {% if log.snapshot_path %}
+              <a href="{{ url_for('static', filename=log.snapshot_path) }}" target="_blank">
+                <img src="{{ url_for('static', filename=log.snapshot_path) }}"
+                     class="snapshot-thumb" alt="snapshot">
+              </a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td>{{ log.camera.name if log.camera else '—' }}</td>
+          <td>
+            {% if log.event_type == 'face_detection' %}
+              <span class="badge badge-danger">Unknown Face</span>
+            {% elif log.event_type == 'line_crossing' %}
+              <span class="badge badge-warning">Line Crossing</span>
+            {% else %}
+              <span class="badge badge-muted">{{ log.event_type }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted" style="padding:32px;">No intruder events recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Pagination -->
+{% if pagination.pages > 1 %}
+<div class="pagination mt-3">
+  {% if pagination.has_prev %}
+    <a href="{{ url_for('intruder.index', page=pagination.prev_num,
+                        camera_id=selected_camera, event_type=selected_event,
+                        date_from=date_from, date_to=date_to) }}"
+       class="page-link">‹ Prev</a>
+  {% endif %}
+
+  {% for p in pagination.iter_pages(left_edge=2, right_edge=2, left_current=2, right_current=2) %}
+    {% if p %}
+      <a href="{{ url_for('intruder.index', page=p,
+                          camera_id=selected_camera, event_type=selected_event,
+                          date_from=date_from, date_to=date_to) }}"
+         class="page-link {{ 'active' if p == pagination.page }}">{{ p }}</a>
+    {% else %}
+      <span class="page-link" style="color:var(--color-text-muted);">…</span>
+    {% endif %}
+  {% endfor %}
+
+  {% if pagination.has_next %}
+    <a href="{{ url_for('intruder.index', page=pagination.next_num,
+                        camera_id=selected_camera, event_type=selected_event,
+                        date_from=date_from, date_to=date_to) }}"
+       class="page-link">Next ›</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

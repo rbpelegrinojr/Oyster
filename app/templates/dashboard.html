@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – Oyster CCTV{% endblock %}
+{% block page_title %}Live Camera Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Intruder banner (hidden until JS populates it) -->
+<div id="intruder-banner" class="intruder-banner" style="display:none; margin-bottom:16px; border-radius:8px;">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <span id="intruder-banner-text">Intruder detected</span>
+  <button onclick="this.parentElement.style.display='none'"
+          style="margin-left:auto;background:none;border:none;color:#fff;cursor:pointer;font-size:1.2rem;">✕</button>
+</div>
+
+{% if cameras %}
+  <div class="camera-grid">
+    {% for cam in cameras %}
+    <div class="card camera-card">
+      <div class="card-header">
+        <span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;">
+            <circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+          </svg>
+          {{ cam.name }}
+        </span>
+        <span class="badge badge-primary" style="font-size:.7rem;">{{ cam.ip_address }}</span>
+      </div>
+      <img src="{{ url_for('dashboard.video_feed', camera_id=cam.id) }}"
+           alt="{{ cam.name }}"
+           loading="lazy">
+      <div class="card-body" style="padding:10px 14px;">
+        <span class="text-muted">Camera #{{ cam.id }}</span>
+        <a href="{{ url_for('settings.edit_camera', camera_id=cam.id) }}"
+           class="btn btn-outline btn-sm" style="float:right;">Settings</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card" style="text-align:center;padding:48px 24px;">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" stroke-width="1.5" style="margin:0 auto 16px;">
+      <circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+    </svg>
+    <h3 style="color:var(--color-text-muted);margin-bottom:8px;">No cameras configured</h3>
+    <p class="text-muted">Go to <a href="{{ url_for('settings.index') }}">Camera Settings</a> to add your first CCTV camera.</p>
+  </div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

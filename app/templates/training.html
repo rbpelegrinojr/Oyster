@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Training – Oyster CCTV{% endblock %}
+{% block page_title %}Face Training{% endblock %}
+
+{% block content %}
+
+<div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;">
+
+  <!-- ── Persons list ───────────────────────────────────── -->
+  <div>
+    <div class="card mb-3">
+      <div class="card-header">
+        Registered Persons
+        <span class="badge badge-primary">{{ persons|length }}</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Samples</th>
+              <th>Trained</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for person in persons %}
+            <tr>
+              <td><strong>{{ person.name }}</strong></td>
+              <td>
+                <span class="badge badge-primary">{{ person.sample_count }}</span>
+              </td>
+              <td>
+                {% if person.trained %}
+                  <span class="badge badge-success">Yes</span>
+                {% else %}
+                  <span class="badge badge-muted">No</span>
+                {% endif %}
+              </td>
+              <td class="flex gap-2">
+                <!-- Quick-capture controls -->
+                <select id="capture-camera-{{ person.id }}" class="form-control" style="width:auto;padding:4px 8px;font-size:.8rem;">
+                  {% for cam in cameras %}
+                  <option value="{{ cam.id }}">{{ cam.name }}</option>
+                  {% endfor %}
+                </select>
+                <button class="btn btn-primary btn-sm capture-btn"
+                        data-person-id="{{ person.id }}"
+                        data-count="{{ person.sample_count }}">
+                  📷 Capture
+                </button>
+                <span class="count-label" id="count-{{ person.id }}">{{ person.sample_count }}</span>
+
+                <form action="{{ url_for('training.delete_person', person_id=person.id) }}"
+                      method="post" style="display:inline;"
+                      onsubmit="return confirm('Delete {{ person.name }} and all samples?');">
+                  <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted" style="padding:24px;">No persons registered yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Train model ─────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">Train Recognition Model</div>
+      <div class="card-body">
+        <p class="text-muted mb-3">
+          This will re-compute face encodings from all captured samples and update the recognition model.
+          All active cameras will use the new model immediately.
+        </p>
+        <div class="progress-wrap mb-3">
+          <div class="progress-bar" id="train-progress" style="width:0%"></div>
+        </div>
+        <p id="train-status" style="font-size:.85rem;min-height:1.2em;"></p>
+        <button id="train-btn" class="btn btn-primary w-100 mt-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          Start Training
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right panel: add person + live preview ─────────── -->
+  <div>
+    <div class="card mb-3">
+      <div class="card-header">Add New Person</div>
+      <div class="card-body">
+        <form action="{{ url_for('training.add_person') }}" method="post">
+          <div class="form-group">
+            <label class="form-label">Full Name *</label>
+            <input type="text" name="name" class="form-control" placeholder="e.g. Juan dela Cruz" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Add Person</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Live preview for capture -->
+    {% if cameras %}
+    <div class="card">
+      <div class="card-header">Live Preview</div>
+      <div class="card-body" style="padding:0;">
+        <select id="preview-camera" class="form-control" style="border-radius:0;border:none;border-bottom:1px solid var(--color-border);">
+          {% for cam in cameras %}
+          <option value="{{ cam.id }}">{{ cam.name }}</option>
+          {% endfor %}
+        </select>
+        <img id="preview-img" src="{{ url_for('training.training_feed', camera_id=cameras[0].id) }}"
+             style="width:100%;display:block;" alt="Live Feed">
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  // Switch preview camera
+  const previewSelect = document.getElementById('preview-camera');
+  const previewImg = document.getElementById('preview-img');
+  if (previewSelect && previewImg) {
+    previewSelect.addEventListener('change', () => {
+      previewImg.src = '/training/feed/' + encodeURIComponent(previewSelect.value);
+    });
+  }
+
+  // Capture buttons
+  document.querySelectorAll('.capture-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const personId = btn.dataset.personId;
+      const camSelect = document.getElementById('capture-camera-' + personId);
+      const cameraId = camSelect ? camSelect.value : previewSelect ? previewSelect.value : 1;
+      const countEl = document.getElementById('count-' + personId);
+
+      fetch('/training/capture/' + personId + '/' + cameraId, { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+          if (d.success) {
+            if (countEl) countEl.textContent = d.count;
+          } else {
+            alert(d.message);
+          }
+        });
+    });
+  });
+
+  // Train button
+  const trainBtn = document.getElementById('train-btn');
+  const trainStatus = document.getElementById('train-status');
+  const progressBar = document.getElementById('train-progress');
+
+  let pollTimer = null;
+  function pollTraining() {
+    fetch('/training/train/status')
+      .then(r => r.json())
+      .then(d => {
+        if (d.running) {
+          trainStatus.textContent = 'Training in progress…';
+          if (progressBar) progressBar.style.width = '60%';
+        } else {
+          clearInterval(pollTimer);
+          if (progressBar) progressBar.style.width = d.success ? '100%' : '10%';
+          trainStatus.textContent = d.message || '';
+          trainStatus.style.color = d.success ? 'var(--color-success)' : 'var(--color-danger)';
+          if (trainBtn) trainBtn.disabled = false;
+        }
+      });
+  }
+
+  if (trainBtn) {
+    trainBtn.addEventListener('click', () => {
+      trainBtn.disabled = true;
+      trainStatus.textContent = 'Starting…';
+      if (progressBar) progressBar.style.width = '20%';
+      fetch('/training/train', { method: 'POST' })
+        .then(() => { pollTimer = setInterval(pollTraining, 2000); });
+    });
+  }
+})();
+</script>
+{% endblock %}
