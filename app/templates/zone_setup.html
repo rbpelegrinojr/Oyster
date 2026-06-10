@@ -28,6 +28,7 @@
 
       <div class="zone-canvas-wrap" id="canvas-wrap">
         <img id="camera-preview"
+             class="camera-enlargeable"
              src="{% if cameras %}/zone/snapshot/{{ cameras[0].id }}{% else %}{% endif %}"
              alt="Camera Preview"
              style="width:100%;display:block;border-radius:6px;">

@@ -114,6 +114,7 @@
           {% endfor %}
         </select>
         <img id="preview-img" src="{{ url_for('training.training_feed', camera_id=cameras[0].id) }}"
+             class="camera-enlargeable"
              style="width:100%;display:block;" alt="Live Feed">
       </div>
     </div>

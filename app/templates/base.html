@@ -92,6 +92,15 @@
   </main>
 </div>
 
+<!-- Camera enlarge modal -->
+<div class="camera-modal-overlay" id="camera-modal">
+  <div class="camera-modal-content">
+    <span class="camera-modal-title" id="camera-modal-title"></span>
+    <button class="camera-modal-close" id="camera-modal-close" title="Close">✕</button>
+    <img id="camera-modal-img" src="" alt="Enlarged Camera View">
+  </div>
+</div>
+
 <script>
   (function () {
     function tick() {
@@ -100,6 +109,42 @@
     }
     tick();
     setInterval(tick, 1000);
+
+    // Camera enlarge modal logic
+    const modal = document.getElementById('camera-modal');
+    const modalImg = document.getElementById('camera-modal-img');
+    const modalTitle = document.getElementById('camera-modal-title');
+    const modalClose = document.getElementById('camera-modal-close');
+
+    function openModal(src, title) {
+      modalImg.src = src;
+      modalTitle.textContent = title || '';
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      modal.classList.remove('active');
+      modalImg.src = '';
+      document.body.style.overflow = '';
+    }
+
+    modalClose.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal.classList.contains('active')) closeModal();
+    });
+
+    // Attach click-to-enlarge to all .camera-enlargeable images
+    document.addEventListener('click', function (e) {
+      const img = e.target.closest('.camera-enlargeable');
+      if (img) {
+        e.preventDefault();
+        openModal(img.src, img.alt || img.dataset.title || '');
+      }
+    });
   })();
 </script>
 {% block extra_scripts %}{% endblock %}
