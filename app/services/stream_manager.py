@@ -31,8 +31,18 @@ from .zone_detection import ZoneDetector
 # Force TCP transport for RTSP streams via FFmpeg.
 # OpenCV defaults to UDP which causes frame loss on WiFi cameras.
 # VLC uses TCP by default, which is why VLC works but OpenCV does not.
+# Also set socket/connection timeouts (in microseconds) so OpenCV does not
+# hang indefinitely when a WiFi camera is slow to respond.
 # ---------------------------------------------------------------------------
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+    "rtsp_transport;tcp"
+    "|analyzeduration;5000000"
+    "|stimeout;5000000"
+    "|timeout;5000000"
+    "|max_delay;500000"
+    "|reorder_queue_size;0"
+    "|buffer_size;1024000"
+)
 
 # ---------------------------------------------------------------------------
 # Colour palette (BGR)
@@ -222,19 +232,41 @@ class CameraWorker:
         last_live: list[bool] = []
 
         while not self._stop_event.is_set():
-            cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
+            # Show connecting placeholder immediately
+            self._set_frame(self._placeholder_frame("Connecting…"))
+
+            # Build RTSP URL with TCP transport hint appended (belt-and-suspenders
+            # approach – the env var sets it globally but some OpenCV/FFmpeg
+            # builds ignore it for individual captures).
+            rtsp = self.rtsp_url
+            if "rtsp://" in rtsp.lower() and "rtsp_transport" not in rtsp:
+                sep = "&" if "?" in rtsp else "?"
+                rtsp = f"{rtsp}{sep}rtsp_transport=tcp"
+
+            cap = cv2.VideoCapture(rtsp, cv2.CAP_FFMPEG)
+
+            # Set timeouts (milliseconds) – supported in OpenCV 4.x+
+            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 15000)
+            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
             if not cap.isOpened():
                 print(f"[Camera {self.camera_id}] Cannot open {self.rtsp_url}. Retrying …")
-                # Show an offline placeholder
-                placeholder = self._placeholder_frame()
-                self._set_frame(placeholder)
+                self._set_frame(self._placeholder_frame("Camera Offline"))
+                cap.release()
                 self._stop_event.wait(_RECONNECT_DELAY)
                 continue
 
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             print(f"[Camera {self.camera_id}] Stream connected.")
 
             while not self._stop_event.is_set():
+                # Flush stale buffered frames – grab without decode to drain
+                # the internal FFmpeg buffer.  WiFi cameras often buffer 2-5
+                # frames which makes the feed look frozen/delayed.
+                for _ in range(2):
+                    if not cap.grab():
+                        break
+
                 ret, frame = cap.read()
                 if not ret:
                     print(f"[Camera {self.camera_id}] Frame read failed. Reconnecting …")
@@ -315,11 +347,14 @@ class CameraWorker:
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _placeholder_frame() -> np.ndarray:
+    def _placeholder_frame(text: str = "Camera Offline") -> np.ndarray:
         img = np.zeros((360, 640, 3), dtype=np.uint8)
         img[:] = (30, 30, 30)
+        # Centre the text
+        (tw, _), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
+        x = max(0, (640 - tw) // 2)
         cv2.putText(
-            img, "Camera Offline", (180, 190),
+            img, text, (x, 190),
             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (100, 100, 100), 2,
         )
         return img
