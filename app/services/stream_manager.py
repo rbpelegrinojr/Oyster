@@ -20,19 +20,14 @@ import time
 from datetime import datetime
 from typing import Dict, Optional
 
-import cv2
-import numpy as np
-
-from .face_service import FaceService
-from .liveness import LivenessDetector
-from .zone_detection import ZoneDetector
-
 # ---------------------------------------------------------------------------
 # Force TCP transport for RTSP streams via FFmpeg.
 # OpenCV defaults to UDP which causes frame loss on WiFi cameras.
 # VLC uses TCP by default, which is why VLC works but OpenCV does not.
 # Also set socket/connection timeouts (in microseconds) so OpenCV does not
 # hang indefinitely when a WiFi camera is slow to respond.
+# Must be set BEFORE importing cv2 so that FFmpeg picks up the options
+# from the very first VideoCapture call.
 # ---------------------------------------------------------------------------
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
     "rtsp_transport;tcp"
@@ -43,6 +38,13 @@ os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
     "|reorder_queue_size;0"
     "|buffer_size;1024000"
 )
+
+import cv2  # noqa: E402  (import after env var setup)
+import numpy as np
+
+from .face_service import FaceService
+from .liveness import LivenessDetector
+from .zone_detection import ZoneDetector
 
 # ---------------------------------------------------------------------------
 # Colour palette (BGR)
@@ -235,20 +237,21 @@ class CameraWorker:
             # Show connecting placeholder immediately
             self._set_frame(self._placeholder_frame("Connecting…"))
 
-            # Build RTSP URL with TCP transport hint appended (belt-and-suspenders
-            # approach – the env var sets it globally but some OpenCV/FFmpeg
-            # builds ignore it for individual captures).
+            # Use the RTSP URL as-is.  TCP transport is enforced via the
+            # OPENCV_FFMPEG_CAPTURE_OPTIONS environment variable set at
+            # module level.  Do NOT append query parameters like
+            # "?rtsp_transport=tcp" to the URL because some camera RTSP
+            # servers reject URLs with unknown query parameters (this is
+            # why VLC works – it never modifies the URL).
             rtsp = self.rtsp_url
-            if "rtsp://" in rtsp.lower() and "rtsp_transport" not in rtsp:
-                sep = "&" if "?" in rtsp else "?"
-                rtsp = f"{rtsp}{sep}rtsp_transport=tcp"
 
-            cap = cv2.VideoCapture(rtsp, cv2.CAP_FFMPEG)
-
-            # Set timeouts (milliseconds) – supported in OpenCV 4.x+
+            # Create capture object, set timeouts BEFORE opening so the
+            # connection attempt respects them.
+            cap = cv2.VideoCapture()
             cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 15000)
             cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            cap.open(rtsp, cv2.CAP_FFMPEG)
 
             if not cap.isOpened():
                 print(f"[Camera {self.camera_id}] Cannot open {self.rtsp_url}. Retrying …")
