@@ -48,13 +48,13 @@ def create_app() -> Flask:
     from .routes.settings import settings_bp
     from .routes.training import training_bp
     from .routes.intruder import intruder_bp
-    from .routes.line_setup import line_setup_bp
+    from .routes.zone_setup import zone_setup_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(training_bp)
     app.register_blueprint(intruder_bp)
-    app.register_blueprint(line_setup_bp)
+    app.register_blueprint(zone_setup_bp)
 
     # Start the global stream manager
     global stream_manager

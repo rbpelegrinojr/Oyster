@@ -328,6 +328,21 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .line-canvas-wrap img { position: relative; width: 100%; display: block; }
 .line-canvas-wrap canvas { cursor: crosshair; }
 
+.zone-canvas-wrap {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+.zone-canvas-wrap img,
+.zone-canvas-wrap canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+}
+.zone-canvas-wrap img { position: relative; width: 100%; display: block; }
+.zone-canvas-wrap canvas { cursor: crosshair; }
+
 /* ── Snapshot thumbnail ───────────────────────────────────── */
 .snapshot-thumb {
   width: 80px;

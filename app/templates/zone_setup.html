@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Zone Setup – Oyster CCTV{% endblock %}
+{% block page_title %}Intrusion Zone Setup{% endblock %}
+
+{% block content %}
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;">
+
+  <!-- ── Drawing panel ─────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">Draw Detection Zone</div>
+    <div class="card-body">
+
+      <div class="form-group">
+        <label class="form-label">Select Camera</label>
+        <select id="camera-select" class="form-control">
+          {% for cam in cameras %}
+          <option value="{{ cam.id }}">{{ cam.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <p class="text-muted mb-3" style="font-size:.83rem;">
+        Click on the camera preview below to draw a polygon zone (at least 3 points).
+        An intruder event is triggered only when an unknown person is detected <strong>inside</strong> this zone.
+        Double-click or click the first point to close the polygon.
+      </p>
+
+      <div class="zone-canvas-wrap" id="canvas-wrap">
+        <img id="camera-preview"
+             src="{% if cameras %}/zone/snapshot/{{ cameras[0].id }}{% else %}{% endif %}"
+             alt="Camera Preview"
+             style="width:100%;display:block;border-radius:6px;">
+        <canvas id="zone-canvas"></canvas>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:16px;margin-top:14px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="zone-enabled" checked
+                 style="width:18px;height:18px;accent-color:var(--color-primary);">
+          <span class="form-label" style="margin:0;">Zone enabled</span>
+        </label>
+
+        <button id="clear-btn" class="btn btn-outline btn-sm">Clear Zone</button>
+        <button id="undo-btn" class="btn btn-outline btn-sm">Undo Point</button>
+
+        <button id="save-zone-btn" class="btn btn-primary" style="margin-left:auto;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Save Zone
+        </button>
+      </div>
+      <p id="zone-message" style="min-height:1.2em;margin-top:8px;font-size:.85rem;"></p>
+    </div>
+  </div>
+
+  <!-- ── Configured zones ─────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">Configured Zones</div>
+    <div class="card-body" style="padding:0;">
+      {% if configs %}
+        {% for cam in cameras %}
+          {% if cam.id in configs %}
+            {% set cfg = configs[cam.id] %}
+            <div style="padding:14px 16px;border-bottom:1px solid var(--color-border);">
+              <div class="flex-between mb-2">
+                <strong>{{ cam.name }}</strong>
+                {% if cfg.enabled %}
+                  <span class="badge badge-success">Enabled</span>
+                {% else %}
+                  <span class="badge badge-muted">Disabled</span>
+                {% endif %}
+              </div>
+              <div class="text-muted" style="font-size:.78rem;">
+                {{ cfg.get_polygon_points()|length }} points defined
+              </div>
+              <div class="flex gap-2 mt-2">
+                <form action="{{ url_for('zone_setup.toggle_zone', camera_id=cam.id) }}"
+                      method="post" style="display:inline;">
+                  <button type="submit" class="btn btn-outline btn-sm">
+                    {{ 'Disable' if cfg.enabled else 'Enable' }}
+                  </button>
+                </form>
+                <form action="{{ url_for('zone_setup.delete_zone', camera_id=cam.id) }}"
+                      method="post" style="display:inline;"
+                      onsubmit="return confirm('Delete zone for {{ cam.name }}?');">
+                  <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <div class="text-muted text-center" style="padding:28px;">No zones configured yet.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/zone_setup.js') }}"></script>
+{% endblock %}

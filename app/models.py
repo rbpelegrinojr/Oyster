@@ -21,8 +21,8 @@ class Camera(db.Model):
     created_at = db.Column(db.DateTime, default=_utcnow)
 
     intruder_logs = db.relationship("IntruderLog", backref="camera", lazy=True)
-    line_config = db.relationship(
-        "LineConfig", backref="camera", uselist=False, lazy=True
+    zone_config = db.relationship(
+        "ZoneConfig", backref="camera", uselist=False, lazy=True
     )
 
     def to_dict(self):
@@ -64,7 +64,7 @@ class IntruderLog(db.Model):
     timestamp = db.Column(db.DateTime, default=_utcnow)
     snapshot_path = db.Column(db.String(255), nullable=True)
     event_type = db.Column(db.String(50), default="face_detection")
-    # 'face_detection' | 'line_crossing'
+    # 'face_detection' | 'zone_intrusion'
 
     def to_dict(self):
         return {
@@ -77,26 +77,39 @@ class IntruderLog(db.Model):
         }
 
 
-class LineConfig(db.Model):
-    __tablename__ = "line_configs"
+class ZoneConfig(db.Model):
+    __tablename__ = "zone_configs"
 
     id = db.Column(db.Integer, primary_key=True)
     camera_id = db.Column(db.Integer, db.ForeignKey("cameras.id"), unique=True)
-    # Coordinates stored as fractions (0.0 – 1.0) of frame width/height
-    x1 = db.Column(db.Float, default=0.0)
-    y1 = db.Column(db.Float, default=0.5)
-    x2 = db.Column(db.Float, default=1.0)
-    y2 = db.Column(db.Float, default=0.5)
+    # Polygon points stored as JSON string: [[x1_frac, y1_frac], [x2_frac, y2_frac], ...]
+    # Coordinates are fractions (0.0 – 1.0) of frame width/height
+    polygon_json = db.Column(db.Text, default="[]")
     enabled = db.Column(db.Boolean, default=True)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
+
+    def get_polygon_points(self) -> list:
+        """Return polygon as list of [x_frac, y_frac] pairs."""
+        import json
+        try:
+            return json.loads(self.polygon_json) if self.polygon_json else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def set_polygon_points(self, points: list) -> None:
+        """Store polygon points from a list of [x_frac, y_frac] pairs."""
+        import json
+        self.polygon_json = json.dumps(points)
+
+    def get_polygon_pixels(self, frame_w: int, frame_h: int) -> list:
+        """Return polygon as list of (x_px, y_px) tuples scaled to frame size."""
+        points = self.get_polygon_points()
+        return [(int(p[0] * frame_w), int(p[1] * frame_h)) for p in points]
 
     def to_dict(self):
         return {
             "id": self.id,
             "camera_id": self.camera_id,
-            "x1": self.x1,
-            "y1": self.y1,
-            "x2": self.x2,
-            "y2": self.y2,
+            "polygon": self.get_polygon_points(),
             "enabled": self.enabled,
         }
