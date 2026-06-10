@@ -30,6 +30,7 @@
       </div>
       <img src="{{ url_for('dashboard.video_feed', camera_id=cam.id) }}"
            alt="{{ cam.name }}"
+           class="camera-enlargeable"
            loading="lazy">
       <div class="card-body" style="padding:10px 14px;">
         <span class="text-muted">Camera #{{ cam.id }}</span>
