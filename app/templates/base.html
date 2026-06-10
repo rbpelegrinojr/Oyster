@@ -46,13 +46,12 @@
       </svg>
       Training
     </a>
-    <a href="{{ url_for('line_setup.index') }}"
-       class="{{ 'active' if request.blueprint == 'line_setup' }}">
+    <a href="{{ url_for('zone_setup.index') }}"
+       class="{{ 'active' if request.blueprint == 'zone_setup' }}">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="5" y1="12" x2="19" y2="12"/>
-        <polyline points="12 5 19 12 12 19"/>
+        <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/>
       </svg>
-      Line Setup
+      Zone Setup
     </a>
     <a href="{{ url_for('intruder.index') }}"
        class="{{ 'active' if request.blueprint == 'intruder' }}">

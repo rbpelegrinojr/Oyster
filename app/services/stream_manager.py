@@ -6,7 +6,7 @@ Manages one background thread per active camera.  Each thread:
   2. Runs face detection every N frames (configurable for performance).
   3. Passes detected faces through liveness detection.
   4. Identifies live faces (known person / INTRUDER).
-  5. Checks INTRUDER faces against the imaginary line (if configured).
+  5. Checks INTRUDER faces against the intrusion zone (if configured).
   6. Logs intruder events and saves snapshots.
   7. Annotates the frame with bounding boxes and labels.
   8. Stores the latest annotated JPEG in a thread-safe buffer for streaming.
@@ -25,14 +25,21 @@ import numpy as np
 
 from .face_service import FaceService
 from .liveness import LivenessDetector
-from .line_crossing import LineCrossingDetector
+from .zone_detection import ZoneDetector
+
+# ---------------------------------------------------------------------------
+# Force TCP transport for RTSP streams via FFmpeg.
+# OpenCV defaults to UDP which causes frame loss on WiFi cameras.
+# VLC uses TCP by default, which is why VLC works but OpenCV does not.
+# ---------------------------------------------------------------------------
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
 
 # ---------------------------------------------------------------------------
 # Colour palette (BGR)
 # ---------------------------------------------------------------------------
 _COLOUR_KNOWN = (57, 163, 22)       # green
 _COLOUR_INTRUDER = (50, 50, 220)    # red (BGR)
-_COLOUR_LINE = (0, 165, 255)        # orange
+_COLOUR_ZONE = (0, 165, 255)        # orange
 _COLOUR_LABEL_BG_KNOWN = (36, 157, 159)   # primary teal
 _COLOUR_LABEL_BG_INTRUDER = (38, 38, 220)
 
@@ -51,17 +58,17 @@ class CameraWorker:
         face_svc: FaceService,
         snapshots_dir: str,
         db_callback,  # callable(camera_id, event_type, snapshot_path)
-        line_config_callback,  # callable(camera_id) -> LineConfig | None
+        zone_config_callback,  # callable(camera_id) -> ZoneConfig | None
     ) -> None:
         self.camera_id = camera_id
         self.rtsp_url = rtsp_url
         self._face_svc = face_svc
         self._snapshots_dir = snapshots_dir
         self._db_callback = db_callback
-        self._line_config_callback = line_config_callback
+        self._zone_config_callback = zone_config_callback
 
         self._liveness = LivenessDetector()
-        self._line_crossing = LineCrossingDetector()
+        self._zone_detector = ZoneDetector()
 
         self._lock = threading.Lock()
         self._frame_jpeg: Optional[bytes] = None
@@ -137,7 +144,6 @@ class CameraWorker:
         for fid in stale:
             del self._tracked_faces[fid]
         self._liveness.purge_stale(active)
-        self._line_crossing.purge_stale(active)
         return assigned
 
     # ------------------------------------------------------------------
@@ -155,17 +161,21 @@ class CameraWorker:
         face_locations: list,
         names: list[str],
         live_flags: list[bool],
-        line_config,
+        zone_config,
     ) -> np.ndarray:
         h, w = frame.shape[:2]
 
-        # Draw imaginary line
-        if line_config and line_config.enabled:
-            x1 = int(line_config.x1 * w)
-            y1 = int(line_config.y1 * h)
-            x2 = int(line_config.x2 * w)
-            y2 = int(line_config.y2 * h)
-            cv2.line(frame, (x1, y1), (x2, y2), _COLOUR_LINE, 2)
+        # Draw intrusion zone polygon
+        if zone_config and zone_config.enabled:
+            points = zone_config.get_polygon_pixels(w, h)
+            if len(points) >= 3:
+                pts_array = np.array(points, dtype=np.int32)
+                # Semi-transparent fill
+                overlay = frame.copy()
+                cv2.fillPoly(overlay, [pts_array], (0, 100, 200))
+                cv2.addWeighted(overlay, 0.15, frame, 0.85, 0, frame)
+                # Border
+                cv2.polylines(frame, [pts_array], isClosed=True, color=_COLOUR_ZONE, thickness=2)
 
         for (top, right, bottom, left), name, is_live in zip(
             face_locations, names, live_flags
@@ -260,33 +270,31 @@ class CameraWorker:
                         live = self._liveness.check(frame, loc, fid)
                         live_flags.append(live)
 
-                    # Intruder + line-crossing logic
-                    line_cfg = self._line_config_callback(self.camera_id)
+                    # Intruder + zone intrusion logic
+                    zone_cfg = self._zone_config_callback(self.camera_id)
                     now = time.time()
                     for idx, (name, is_live, fid, centroid) in enumerate(
                         zip(names, live_flags, face_ids, centroids)
                     ):
                         if name == "INTRUDER" and is_live:
-                            # Log face-detection intruder (with cooldown)
-                            if now - self._last_snapshot_time >= _SNAPSHOT_COOLDOWN:
-                                snapshot = self._save_snapshot(frame.copy())
-                                self._last_snapshot_time = now
-                                self._db_callback(self.camera_id, "face_detection", snapshot)
-
-                            # Check line crossing
-                            if line_cfg and line_cfg.enabled:
-                                crossed = self._line_crossing.check(
-                                    fid,
-                                    centroid,
-                                    (line_cfg.x1, line_cfg.y1, line_cfg.x2, line_cfg.y2),
-                                    w,
-                                    h,
+                            # Check if intruder is inside the intrusion zone
+                            if zone_cfg and zone_cfg.enabled:
+                                inside = self._zone_detector.is_inside(
+                                    centroid, zone_cfg.get_polygon_pixels(w, h)
                                 )
-                                if crossed:
-                                    snap2 = self._save_snapshot(frame.copy())
-                                    self._db_callback(
-                                        self.camera_id, "line_crossing", snap2
-                                    )
+                                if inside:
+                                    if now - self._last_snapshot_time >= _SNAPSHOT_COOLDOWN:
+                                        snapshot = self._save_snapshot(frame.copy())
+                                        self._last_snapshot_time = now
+                                        self._db_callback(
+                                            self.camera_id, "zone_intrusion", snapshot
+                                        )
+                            else:
+                                # No zone configured – log any intruder detection
+                                if now - self._last_snapshot_time >= _SNAPSHOT_COOLDOWN:
+                                    snapshot = self._save_snapshot(frame.copy())
+                                    self._last_snapshot_time = now
+                                    self._db_callback(self.camera_id, "face_detection", snapshot)
 
                     last_names = names
                     last_locations = locations
@@ -297,7 +305,7 @@ class CameraWorker:
                     last_locations,
                     last_names,
                     last_live,
-                    self._line_config_callback(self.camera_id),
+                    self._zone_config_callback(self.camera_id),
                 )
                 self._set_frame(annotated)
 
@@ -345,11 +353,11 @@ class StreamManager:
             db.session.add(log)
             db.session.commit()
 
-    def _line_config_callback(self, camera_id: int):
-        from app.models import LineConfig
+    def _zone_config_callback(self, camera_id: int):
+        from app.models import ZoneConfig
 
         with self._app.app_context():
-            return LineConfig.query.filter_by(camera_id=camera_id).first()
+            return ZoneConfig.query.filter_by(camera_id=camera_id).first()
 
     # ------------------------------------------------------------------
     def start_all(self) -> None:
@@ -370,7 +378,7 @@ class StreamManager:
                 face_svc=self._face_svc,
                 snapshots_dir=self._app.config["SNAPSHOTS_DIR"],
                 db_callback=self._db_callback,
-                line_config_callback=self._line_config_callback,
+                zone_config_callback=self._zone_config_callback,
             )
             worker.start()
             self._workers[camera_id] = worker
