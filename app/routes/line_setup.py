@@ -16,7 +16,7 @@ from flask import (
 
 from app.database import db
 from app.models import Camera, LineConfig
-from app import stream_manager
+import app as app_module
 
 line_setup_bp = Blueprint("line_setup", __name__, url_prefix="/line")
 
@@ -73,7 +73,7 @@ def toggle_line(camera_id: int):
 # Snapshot preview (single frame) for line drawing
 @line_setup_bp.route("/snapshot/<int:camera_id>")
 def snapshot(camera_id: int):
-    frame = stream_manager.get_frame(camera_id) if stream_manager else None
+    frame = app_module.stream_manager.get_frame(camera_id) if app_module.stream_manager else None
     if not frame:
         # Return a 1x1 grey JPEG as placeholder
         import io
@@ -88,7 +88,7 @@ def snapshot(camera_id: int):
 
 def _line_mjpeg(camera_id: int):
     while True:
-        frame = stream_manager.get_frame(camera_id) if stream_manager else None
+        frame = app_module.stream_manager.get_frame(camera_id) if app_module.stream_manager else None
         if frame:
             yield (
                 b"--frame\r\n"

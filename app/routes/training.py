@@ -20,7 +20,7 @@ from flask import (
 
 from app.database import db
 from app.models import Camera, Person
-from app import stream_manager
+import app as app_module
 
 training_bp = Blueprint("training", __name__, url_prefix="/training")
 
@@ -45,8 +45,8 @@ def _do_train(dataset_dir: str, models_dir: str, app):
     with _training_lock:
         _training_status = {"running": False, "message": msg, "success": ok}
 
-    if ok and stream_manager:
-        stream_manager.reload_encodings()
+    if ok and app_module.stream_manager:
+        app_module.stream_manager.reload_encodings()
 
 
 @training_bp.route("/")
@@ -121,7 +121,7 @@ def capture_frame(person_id: int, camera_id: int):
     import cv2
     import numpy as np
 
-    frame_bytes = stream_manager.get_frame(camera_id) if stream_manager else None
+    frame_bytes = app_module.stream_manager.get_frame(camera_id) if app_module.stream_manager else None
     if not frame_bytes:
         return jsonify({"success": False, "message": "No frame available from camera."})
 
@@ -153,7 +153,7 @@ def capture_frame(person_id: int, camera_id: int):
 # ------------------------------------------------------------------
 def _training_mjpeg(camera_id: int):
     while True:
-        frame = stream_manager.get_frame(camera_id) if stream_manager else None
+        frame = app_module.stream_manager.get_frame(camera_id) if app_module.stream_manager else None
         if frame:
             yield (
                 b"--frame\r\n"
