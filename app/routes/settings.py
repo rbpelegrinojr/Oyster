@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, render_template, request, redirect, url_fo
 
 from app.database import db
 from app.models import Camera
-from app import stream_manager
+import app as app_module
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -43,8 +43,8 @@ def add_camera():
     db.session.add(cam)
     db.session.commit()
 
-    if stream_manager:
-        stream_manager.restart_worker(cam.id, cam.rtsp_url)
+    if app_module.stream_manager:
+        app_module.stream_manager.restart_worker(cam.id, cam.rtsp_url)
 
     flash(f'Camera "{name}" added successfully.', "success")
     return redirect(url_for("settings.index"))
@@ -65,11 +65,11 @@ def edit_camera(camera_id: int):
         cam.is_active = "is_active" in request.form
         db.session.commit()
 
-        if stream_manager:
+        if app_module.stream_manager:
             if cam.is_active:
-                stream_manager.restart_worker(cam.id, cam.rtsp_url)
+                app_module.stream_manager.restart_worker(cam.id, cam.rtsp_url)
             else:
-                stream_manager.stop_worker(cam.id)
+                app_module.stream_manager.stop_worker(cam.id)
 
         flash(f'Camera "{cam.name}" updated.', "success")
         return redirect(url_for("settings.index"))
@@ -80,8 +80,8 @@ def edit_camera(camera_id: int):
 @settings_bp.route("/camera/<int:camera_id>/delete", methods=["POST"])
 def delete_camera(camera_id: int):
     cam = Camera.query.get_or_404(camera_id)
-    if stream_manager:
-        stream_manager.stop_worker(cam.id)
+    if app_module.stream_manager:
+        app_module.stream_manager.stop_worker(cam.id)
     db.session.delete(cam)
     db.session.commit()
     flash(f'Camera "{cam.name}" deleted.', "warning")
@@ -93,11 +93,11 @@ def toggle_camera(camera_id: int):
     cam = Camera.query.get_or_404(camera_id)
     cam.is_active = not cam.is_active
     db.session.commit()
-    if stream_manager:
+    if app_module.stream_manager:
         if cam.is_active:
-            stream_manager.restart_worker(cam.id, cam.rtsp_url)
+            app_module.stream_manager.restart_worker(cam.id, cam.rtsp_url)
         else:
-            stream_manager.stop_worker(cam.id)
+            app_module.stream_manager.stop_worker(cam.id)
     return jsonify({"is_active": cam.is_active})
 
 

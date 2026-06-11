@@ -16,7 +16,7 @@ from flask import (
 
 from app.database import db
 from app.models import Camera, ZoneConfig
-from app import stream_manager
+import app as app_module
 
 zone_setup_bp = Blueprint("zone_setup", __name__, url_prefix="/zone")
 
@@ -82,7 +82,7 @@ def toggle_zone(camera_id: int):
 # Snapshot preview (single frame) for zone drawing
 @zone_setup_bp.route("/snapshot/<int:camera_id>")
 def snapshot(camera_id: int):
-    frame = stream_manager.get_frame(camera_id) if stream_manager else None
+    frame = app_module.stream_manager.get_frame(camera_id) if app_module.stream_manager else None
     if not frame:
         import io
         from PIL import Image
@@ -96,7 +96,7 @@ def snapshot(camera_id: int):
 
 def _zone_mjpeg(camera_id: int):
     while True:
-        frame = stream_manager.get_frame(camera_id) if stream_manager else None
+        frame = app_module.stream_manager.get_frame(camera_id) if app_module.stream_manager else None
         if frame:
             yield (
                 b"--frame\r\n"

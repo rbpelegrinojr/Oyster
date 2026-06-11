@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from flask import Blueprint, Response, render_template, current_app
 
-from app import stream_manager
+import app as app_module
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -13,7 +13,8 @@ dashboard_bp = Blueprint("dashboard", __name__)
 def _mjpeg_generator(camera_id: int):
     """Yield MJPEG frames for the given camera."""
     while True:
-        frame = stream_manager.get_frame(camera_id) if stream_manager else None
+        sm = app_module.stream_manager
+        frame = sm.get_frame(camera_id) if sm else None
         if frame:
             yield (
                 b"--frame\r\n"
