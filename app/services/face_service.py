@@ -25,6 +25,11 @@ except ImportError:
 ENCODINGS_FILE = "encodings.pkl"
 TOLERANCE = 0.5  # lower = stricter match
 
+# Global lock to serialise all calls into the face_recognition / dlib C++
+# layer.  dlib is NOT thread-safe; concurrent calls from the stream threads
+# and the training thread cause memory access violations on Windows.
+_fr_lock = threading.Lock()
+
 
 class FaceService:
     """Thread-safe face encoding store and identifier."""
@@ -69,7 +74,9 @@ class FaceService:
         if not _FR_AVAILABLE or not face_locations:
             return ["INTRUDER"] * len(face_locations)
 
-        encodings = face_recognition.face_encodings(frame_rgb, face_locations)
+        with _fr_lock:
+            encodings = face_recognition.face_encodings(frame_rgb, face_locations)
+
         results: List[str] = []
 
         with self._lock:
@@ -80,8 +87,9 @@ class FaceService:
             if not known_enc:
                 results.append("INTRUDER")
                 continue
-            matches = face_recognition.compare_faces(known_enc, enc, tolerance=TOLERANCE)
-            face_distances = face_recognition.face_distance(known_enc, enc)
+            with _fr_lock:
+                matches = face_recognition.compare_faces(known_enc, enc, tolerance=TOLERANCE)
+                face_distances = face_recognition.face_distance(known_enc, enc)
             if True in matches:
                 best_idx = int(np.argmin(face_distances))
                 results.append(known_names[best_idx])
@@ -96,7 +104,8 @@ class FaceService:
         """Return face locations (top, right, bottom, left) in the frame."""
         if not _FR_AVAILABLE:
             return []
-        return face_recognition.face_locations(frame_rgb, model=model)
+        with _fr_lock:
+            return face_recognition.face_locations(frame_rgb, model=model)
 
     # ------------------------------------------------------------------
     def train(self, dataset_dir: str) -> Tuple[bool, str]:
@@ -135,8 +144,9 @@ class FaceService:
                     errors.append(f"Cannot read {img_path}")
                     continue
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                locs = face_recognition.face_locations(rgb)
-                encs = face_recognition.face_encodings(rgb, locs)
+                with _fr_lock:
+                    locs = face_recognition.face_locations(rgb)
+                    encs = face_recognition.face_encodings(rgb, locs)
                 for enc in encs:
                     encodings.append(enc)
                     names.append(person_name)
