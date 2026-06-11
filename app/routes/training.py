@@ -104,11 +104,34 @@ def delete_person(person_id: int):
 
     person = Person.query.get_or_404(person_id)
     dataset_dir = current_app.config["DATASET_DIR"]
+    models_dir = current_app.config["MODELS_DIR"]
     folder = os.path.realpath(os.path.join(dataset_dir, person.name))
     if folder.startswith(os.path.realpath(dataset_dir)) and os.path.isdir(folder):
         shutil.rmtree(folder)
     db.session.delete(person)
     db.session.commit()
+
+    # Retrain the model so deleted person is no longer recognised.
+    # If no person folders remain, remove the encodings file entirely.
+    from app.services.face_service import FaceService
+
+    remaining_dirs = [
+        d for d in os.listdir(dataset_dir)
+        if os.path.isdir(os.path.join(dataset_dir, d))
+    ]
+    if remaining_dirs:
+        svc = FaceService(models_dir)
+        svc.train(dataset_dir)
+    else:
+        # No persons left – remove encodings file
+        encodings_path = os.path.join(models_dir, "encodings.pkl")
+        if os.path.exists(encodings_path):
+            os.remove(encodings_path)
+
+    # Reload encodings in the running stream manager
+    if app_module.stream_manager:
+        app_module.stream_manager.reload_encodings()
+
     flash(f'Person "{person.name}" deleted.', "warning")
     return redirect(url_for("training.index"))
 

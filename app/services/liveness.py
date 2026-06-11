@@ -87,7 +87,8 @@ def _eye_aspect_ratio(eye_pts: np.ndarray) -> float:
 # Motion variance helpers
 # ---------------------------------------------------------------------------
 _MOTION_WINDOW = 10   # frames to accumulate
-_MOTION_THRESHOLD = 1.5  # mean pixel std-dev below this → likely a photo
+_MOTION_THRESHOLD = 2.0  # mean pixel std-dev below this → likely a photo
+_MIN_FRAMES_BEFORE_PASS = 5  # require at least this many frames before passing
 
 
 # ---------------------------------------------------------------------------
@@ -158,11 +159,14 @@ class LivenessDetector:
         roi_resized = cv2.resize(roi_gray, (64, 64))
         state.face_patches.append(roi_resized.astype(np.float32))
 
-        if len(state.face_patches) >= _MOTION_WINDOW:
+        motion_passed = False
+        if len(state.face_patches) >= _MIN_FRAMES_BEFORE_PASS:
             stack = np.stack(state.face_patches, axis=0)   # (N, 64, 64)
             motion_score = float(np.mean(np.std(stack, axis=0)))
-            if motion_score < _MOTION_THRESHOLD:
-                # Likely a static image / printed photo
+            if motion_score >= _MOTION_THRESHOLD:
+                motion_passed = True
+            elif len(state.face_patches) >= _MOTION_WINDOW:
+                # Accumulated full window but motion is too low – static image
                 return False
 
         # ── 2. EAR blink check (if dlib available) ───────────────────
@@ -194,5 +198,9 @@ class LivenessDetector:
                 # Haven't blinked in the window – likely a photo
                 return False
 
-        # Passes both checks (or window not yet full → give benefit of doubt)
+        # Require positive motion evidence before passing liveness.
+        # Do NOT give benefit of doubt while frames are still accumulating.
+        if not motion_passed:
+            return False
+
         return True
